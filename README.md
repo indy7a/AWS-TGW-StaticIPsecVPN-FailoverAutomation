@@ -20,47 +20,33 @@ This solution provides automated failover between primary and standby Site-to-Si
 - Seamless failover to standby VPN connection
 - Automatic recovery when primary connection is restored
 - Real-time notifications of route changes
-- Deployment options via CloudFormation or AWS CDK
 
-## Deployment Options
+## Deployment
 
-### Option 1: CloudFormation (Recommended)
+### Prerequisites
 
-1. **Prerequisites**:
-   - AWS CLI installed and configured
-   - A VPC in your AWS account
-   - Two public IP addresses for your customer gateways (on-premises VPN devices)
+- AWS CLI installed and configured
+- A VPC in your AWS account
+- Two public IP addresses for your customer gateways (on-premises VPN devices)
 
-2. **Deploy using script**:
-   ```bash
-   ./deploy-tgw-vpn.sh
-   ```
-   The script will:
-   - Show available VPCs in your account
-   - Prompt for VPC ID and customer gateway IP addresses
-   - Deploy the CloudFormation stack
-   - Display stack outputs when complete
+### Deploy using script (Recommended)
 
-3. **Manual deployment**:
-   - Open AWS CloudFormation console
-   - Create new stack with `tgw-vpn-monitoring.yaml`
-   - Enter required parameters
-   - Create stack
+```bash
+./deploy-tgw-vpn.sh
+```
 
-### Option 2: AWS CDK
+The script will:
+- Show available VPCs in your account
+- Prompt for VPC ID and customer gateway IP addresses
+- Deploy the CloudFormation stack
+- Display stack outputs when complete
 
-1. **Prerequisites**:
-   - Node.js and npm installed
-   - AWS CDK installed (`npm install -g aws-cdk`)
-   - Python 3.9+ installed
+### Manual deployment
 
-2. **Deploy using CDK**:
-   ```bash
-   cd tgw-vpn-cdk
-   pip install -r requirements.txt
-   # Update cdk.json with your VPC ID and customer gateway IPs
-   cdk deploy
-   ```
+1. Open AWS CloudFormation console
+2. Create new stack with `tgw-vpn-monitoring.yaml`
+3. Enter required parameters
+4. Create stack
 
 ## Post-Deployment Steps
 
