@@ -1,4 +1,4 @@
-# AWS Transit Gateway VPN Failover Automation
+# AWS Transit Gateway Static IPSec VPN Failover Automation
 
 ## Overview
 
