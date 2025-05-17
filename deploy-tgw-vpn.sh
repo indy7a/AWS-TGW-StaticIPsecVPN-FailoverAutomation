@@ -55,7 +55,7 @@ STACK_NAME="tgw-vpn-monitoring"
 echo "Deploying CloudFormation stack $STACK_NAME..."
 aws cloudformation create-stack \
     --stack-name $STACK_NAME \
-    --template-body file://tgw-vpn-simplified-fixed.yaml \
+    --template-body file://tgw-vpn-monitoring.yaml \
     --parameters \
         ParameterKey=VpcId,ParameterValue=$VPC_ID \
         ParameterKey=PrimaryCustomerGatewayIp,ParameterValue=$PRIMARY_CGW_IP \

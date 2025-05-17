@@ -33,7 +33,7 @@ This solution provides automated failover between primary and standby Site-to-Si
 
 2. **Deploy using script**:
    ```bash
-   ./deploy-tgw-vpn-fixed.sh
+   ./deploy-tgw-vpn.sh
    ```
    The script will:
    - Show available VPCs in your account
@@ -43,7 +43,7 @@ This solution provides automated failover between primary and standby Site-to-Si
 
 3. **Manual deployment**:
    - Open AWS CloudFormation console
-   - Create new stack with `tgw-vpn-simplified-fixed.yaml`
+   - Create new stack with `tgw-vpn-monitoring.yaml`
    - Enter required parameters
    - Create stack
 
