@@ -1,0 +1,29 @@
+digraph "Transit Gateway VPN Monitoring Architecture" {
+	graph [fontcolor="#2D3436" fontname="Sans-Serif" fontsize=15 label="Transit Gateway VPN Monitoring Architecture" nodesep=0.60 pad=2.0 rankdir=LR ranksep=0.75 splines=ortho]
+	node [fixedsize=true fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13 height=1.4 imagescale=true labelloc=b shape=box style=rounded width=1.4]
+	edge [color="#7B8894"]
+	"1c3490a1e3624682979ff4c297523199" -> "77ef1e802af6451e871af03f7bcf850f" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"1c3490a1e3624682979ff4c297523199" -> c54883d48e914f4cb1c84f02e19baa88 [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"1c3490a1e3624682979ff4c297523199" -> cdf96162b6af4306bacc29ba44998aa7 [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"1c3490a1e3624682979ff4c297523199" -> "75b38837243640ffbd786a602f98bc04" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"1c3490a1e3624682979ff4c297523199" -> "56caaa3c736540c4ab7f8a3251331790" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	subgraph "cluster_On-Premises Network (192.168.0.0/16)" {
+		graph [bgcolor="#E5F5FD" fontname="Sans-Serif" fontsize=12 label="On-Premises Network (192.168.0.0/16)" labeljust=l pencolor="#AEB6BE" rankdir=LR shape=box style=rounded]
+		"1c3490a1e3624682979ff4c297523199" [label="On-Premises Router" height=1.9 image="/Users/alscurtu/.cache/uv/archive-v0/Uz-p3M622jk4DBHRY41lC/lib/python3.11/site-packages/resources/generic/network/router.png" shape=none]
+		subgraph "cluster_On-Premises Resources" {
+			graph [bgcolor="#EBF3E7" fontname="Sans-Serif" fontsize=12 label="On-Premises Resources" labeljust=l pencolor="#AEB6BE" rankdir=LR shape=box style=rounded]
+			"77ef1e802af6451e871af03f7bcf850f" [label="Server 1" height=1.9 image="/Users/alscurtu/.cache/uv/archive-v0/Uz-p3M622jk4DBHRY41lC/lib/python3.11/site-packages/resources/onprem/compute/server.png" shape=none]
+			c54883d48e914f4cb1c84f02e19baa88 [label="Server 2" height=1.9 image="/Users/alscurtu/.cache/uv/archive-v0/Uz-p3M622jk4DBHRY41lC/lib/python3.11/site-packages/resources/onprem/compute/server.png" shape=none]
+			cdf96162b6af4306bacc29ba44998aa7 [label="Server 3" height=1.9 image="/Users/alscurtu/.cache/uv/archive-v0/Uz-p3M622jk4DBHRY41lC/lib/python3.11/site-packages/resources/onprem/compute/server.png" shape=none]
+		}
+		"75b38837243640ffbd786a602f98bc04" [label="Primary CGW
+203.0.113.1" height=2.3 image="/Users/alscurtu/.cache/uv/archive-v0/Uz-p3M622jk4DBHRY41lC/lib/python3.11/site-packages/resources/aws/network/internet-gateway.png" shape=none]
+		"56caaa3c736540c4ab7f8a3251331790" [label="Standby CGW
+203.0.113.2" height=2.3 image="/Users/alscurtu/.cache/uv/archive-v0/Uz-p3M622jk4DBHRY41lC/lib/python3.11/site-packages/resources/aws/network/internet-gateway.png" shape=none]
+	}
+	subgraph "cluster_AWS Cloud" {
+		graph [bgcolor="#E5F5FD" fontname="Sans-Serif" fontsize=12 label="AWS Cloud" labeljust=l pencolor="#AEB6BE" rankdir=LR shape=box style=rounded]
+		"4e354c4ef36c4aa7bf22b580b3f7b9eb" [label="Transit Gateway
+tgw-06cfcd82615995f5f" height=2.3 image="/Users/alscurtu/.cache/uv/archive-v0/Uz-p3M622jk4DBHRY41lC/lib/python3.11/site-packages/resources/aws/network/transit-gateway.png" shape=none]
+	}
+}

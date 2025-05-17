@@ -1,0 +1,7 @@
+README.md
+setup.py
+tgw_vpn_monitoring.egg-info/PKG-INFO
+tgw_vpn_monitoring.egg-info/SOURCES.txt
+tgw_vpn_monitoring.egg-info/dependency_links.txt
+tgw_vpn_monitoring.egg-info/requires.txt
+tgw_vpn_monitoring.egg-info/top_level.txt

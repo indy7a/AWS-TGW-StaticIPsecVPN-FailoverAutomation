@@ -1,0 +1,469 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for Transit Gateway with VPN attachments and Lambda monitoring'
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID to attach to the Transit Gateway
+
+  OnPremiseCidr:
+    Type: String
+    Default: '192.168.0.0/16'
+    Description: CIDR block for on-premises network
+
+  PrimaryCustomerGatewayIp:
+    Type: String
+    Description: IP address of the primary customer gateway
+
+  StandbyCustomerGatewayIp:
+    Type: String
+    Description: IP address of the standby customer gateway
+
+  LambdaSchedule:
+    Type: String
+    Default: 'rate(5 minutes)'
+    Description: Schedule expression for Lambda function execution
+
+Resources:
+  # Transit Gateway
+  TransitGateway:
+    Type: AWS::EC2::TransitGateway
+    Properties:
+      Description: Transit Gateway for VPN connections
+      DefaultRouteTableAssociation: enable
+      DefaultRouteTablePropagation: enable
+      AutoAcceptSharedAttachments: disable
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-TGW'
+
+  # Transit Gateway Attachment for VPC
+  TransitGatewayAttachment:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      TransitGatewayId: !Ref TransitGateway
+      VpcId: !Ref VpcId
+      SubnetIds: !GetAtt VpcSubnetInfo.SubnetIds
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-TGW-Attachment'
+
+  # Lambda function to get VPC subnets
+  VpcSubnetInfoFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.9
+      Handler: index.handler
+      Role: !GetAtt VpcSubnetInfoRole.Arn
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          
+          def handler(event, context):
+              if event['RequestType'] in ['Create', 'Update']:
+                  try:
+                      vpc_id = event['ResourceProperties']['VpcId']
+                      ec2 = boto3.client('ec2')
+                      
+                      # Get all subnets in the VPC
+                      response = ec2.describe_subnets(
+                          Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}]
+                      )
+                      
+                      # Get subnet IDs
+                      subnet_ids = [subnet['SubnetId'] for subnet in response['Subnets']]
+                      
+                      if not subnet_ids:
+                          cfnresponse.send(event, context, cfnresponse.FAILED, 
+                                          {'Error': f'No subnets found in VPC {vpc_id}'})
+                          return
+                      
+                      # Take up to 3 subnets for TGW attachment
+                      selected_subnets = subnet_ids[:3]
+                      
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, 
+                                      {'SubnetIds': selected_subnets})
+                  except Exception as e:
+                      cfnresponse.send(event, context, cfnresponse.FAILED, 
+                                      {'Error': str(e)})
+              else:
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, 
+                                  {'Message': 'No action required for Delete'})
+
+  VpcSubnetInfoRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: EC2DescribeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeSubnets
+                Resource: '*'
+
+  VpcSubnetInfo:
+    Type: Custom::VpcSubnetInfo
+    Properties:
+      ServiceToken: !GetAtt VpcSubnetInfoFunction.Arn
+      VpcId: !Ref VpcId
+
+  # Customer Gateways
+  PrimaryCustomerGateway:
+    Type: AWS::EC2::CustomerGateway
+    Properties:
+      Type: ipsec.1
+      BgpAsn: 65000
+      IpAddress: !Ref PrimaryCustomerGatewayIp
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Primary-CGW'
+
+  StandbyCustomerGateway:
+    Type: AWS::EC2::CustomerGateway
+    Properties:
+      Type: ipsec.1
+      BgpAsn: 65000
+      IpAddress: !Ref StandbyCustomerGatewayIp
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Standby-CGW'
+
+  # VPN Connections
+  PrimaryVpnConnection:
+    Type: AWS::EC2::VPNConnection
+    Properties:
+      Type: ipsec.1
+      CustomerGatewayId: !Ref PrimaryCustomerGateway
+      TransitGatewayId: !Ref TransitGateway
+      StaticRoutesOnly: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Primary-VPN'
+
+  StandbyVpnConnection:
+    Type: AWS::EC2::VPNConnection
+    Properties:
+      Type: ipsec.1
+      CustomerGatewayId: !Ref StandbyCustomerGateway
+      TransitGatewayId: !Ref TransitGateway
+      StaticRoutesOnly: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Standby-VPN'
+
+  # SNS Topic for Lambda notifications
+  VpnMonitoringTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: VPN Monitoring Alerts
+      TopicName: !Sub '${AWS::StackName}-vpn-monitoring-alerts'
+
+  # Lambda Role for VPN Monitoring
+  VpnMonitoringLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: VpnMonitoringPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeVpnConnections
+                  - ec2:DescribeTransitGatewayAttachments
+                  - ec2:DescribeTransitGatewayRouteTables
+                  - ec2:SearchTransitGatewayRoutes
+                  - ec2:ReplaceTransitGatewayRoute
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref VpnMonitoringTopic
+
+  # Lambda Function for VPN Monitoring
+  VpnMonitoringLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-vpn-monitoring'
+      Handler: index.lambda_handler
+      Role: !GetAtt VpnMonitoringLambdaRole.Arn
+      Runtime: python3.9
+      Timeout: 60
+      Environment:
+        Variables:
+          PRIMARY_VPN_CONNECTION_ID: !Ref PrimaryVpnConnection
+          STANDBY_VPN_CONNECTION_ID: !Ref StandbyVpnConnection
+          TRANSIT_GATEWAY_ID: !Ref TransitGateway
+          DESTINATION_CIDR_BLOCK: !Ref OnPremiseCidr
+          SNS_TOPIC_ARN: !Ref VpnMonitoringTopic
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import logging
+          import os
+
+          # Configure logging
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          # Initialize AWS clients
+          ec2 = boto3.client('ec2')
+          sns = boto3.client('sns')
+
+          # Get environment variables
+          PRIMARY_VPN_CONNECTION_ID = os.environ.get('PRIMARY_VPN_CONNECTION_ID')
+          STANDBY_VPN_CONNECTION_ID = os.environ.get('STANDBY_VPN_CONNECTION_ID')
+          TRANSIT_GATEWAY_ID = os.environ.get('TRANSIT_GATEWAY_ID')
+          DESTINATION_CIDR_BLOCK = os.environ.get('DESTINATION_CIDR_BLOCK')
+          SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN')
+
+          def lambda_handler(event, context):
+              """
+              Monitor VPN connections to Transit Gateway and reconfigure routes when primary VPN is down.
+              """
+              logger.info(f"Received event: {json.dumps(event)}")
+              
+              try:
+                  # Check if this is a CloudWatch Event for VPN state change
+                  if 'detail-type' in event and event['detail-type'] == 'AWS Health Event':
+                      # Process AWS Health event
+                      process_health_event(event)
+                  else:
+                      # Regular scheduled check
+                      check_vpn_status()
+                      
+                  return {
+                      'statusCode': 200,
+                      'body': json.dumps('VPN monitoring completed successfully')
+                  }
+              except Exception as e:
+                  logger.error(f"Error in lambda_handler: {str(e)}")
+                  send_notification(f"Error monitoring VPN connections: {str(e)}")
+                  raise
+
+          def process_health_event(event):
+              """Process AWS Health events related to VPN connections"""
+              if 'detail' in event and 'eventTypeCode' in event['detail']:
+                  if 'VPN' in event['detail']['eventTypeCode']:
+                      logger.info(f"Processing VPN health event: {event['detail']['eventTypeCode']}")
+                      check_vpn_status()
+
+          def check_vpn_status():
+              """Check the status of primary and standby VPN connections"""
+              # Get VPN connection status
+              primary_vpn_status = get_vpn_status(PRIMARY_VPN_CONNECTION_ID)
+              standby_vpn_status = get_vpn_status(STANDBY_VPN_CONNECTION_ID)
+              
+              logger.info(f"Primary VPN status: {primary_vpn_status}")
+              logger.info(f"Standby VPN status: {standby_vpn_status}")
+              
+              # Get current route table for the transit gateway
+              tgw_route_tables = ec2.describe_transit_gateway_route_tables(
+                  Filters=[
+                      {
+                          'Name': 'transit-gateway-id',
+                          'Values': [TRANSIT_GATEWAY_ID]
+                      }
+                  ]
+              )
+              
+              if not tgw_route_tables['TransitGatewayRouteTables']:
+                  logger.error(f"No route tables found for Transit Gateway {TRANSIT_GATEWAY_ID}")
+                  send_notification(f"No route tables found for Transit Gateway {TRANSIT_GATEWAY_ID}")
+                  return
+              
+              route_table_id = tgw_route_tables['TransitGatewayRouteTables'][0]['TransitGatewayRouteTableId']
+              
+              # Check current routes
+              current_routes = ec2.search_transit_gateway_routes(
+                  TransitGatewayRouteTableId=route_table_id,
+                  Filters=[
+                      {
+                          'Name': 'route-search.exact-match',
+                          'Values': [DESTINATION_CIDR_BLOCK]
+                      }
+                  ]
+              )
+              
+              # Determine which attachment is currently active
+              current_active_attachment = None
+              if 'Routes' in current_routes and current_routes['Routes']:
+                  for route in current_routes['Routes']:
+                      if route['State'] == 'active':
+                          current_active_attachment = route['TransitGatewayAttachments'][0]['TransitGatewayAttachmentId'] if route['TransitGatewayAttachments'] else None
+              
+              # Get attachment IDs for both VPN connections
+              primary_attachment_id = get_tgw_attachment_id(PRIMARY_VPN_CONNECTION_ID)
+              standby_attachment_id = get_tgw_attachment_id(STANDBY_VPN_CONNECTION_ID)
+              
+              # Logic to determine if we need to switch routes
+              if primary_vpn_status == 'available' and current_active_attachment != primary_attachment_id:
+                  # Primary is healthy but not active, switch to primary
+                  update_route(route_table_id, DESTINATION_CIDR_BLOCK, primary_attachment_id)
+                  send_notification(f"Switched route for {DESTINATION_CIDR_BLOCK} to primary VPN connection")
+              elif primary_vpn_status != 'available' and standby_vpn_status == 'available' and current_active_attachment != standby_attachment_id:
+                  # Primary is down, standby is healthy, switch to standby
+                  update_route(route_table_id, DESTINATION_CIDR_BLOCK, standby_attachment_id)
+                  send_notification(f"Primary VPN connection is down. Switched route for {DESTINATION_CIDR_BLOCK} to standby VPN connection")
+              elif primary_vpn_status != 'available' and standby_vpn_status != 'available':
+                  # Both connections are down
+                  send_notification(f"CRITICAL: Both primary and standby VPN connections are down. No healthy path available for {DESTINATION_CIDR_BLOCK}")
+
+          def get_vpn_status(vpn_connection_id):
+              """Get the status of a VPN connection"""
+              response = ec2.describe_vpn_connections(
+                  VpnConnectionIds=[vpn_connection_id]
+              )
+              
+              if not response['VpnConnections']:
+                  logger.error(f"VPN connection {vpn_connection_id} not found")
+                  return 'not_found'
+              
+              # Check tunnel status - both tunnels should be UP for the connection to be considered healthy
+              vpn_connection = response['VpnConnections'][0]
+              tunnel_statuses = [tunnel['Status'] for tunnel in vpn_connection['VgwTelemetry']]
+              
+              # If any tunnel is UP, consider the connection available for routing
+              if 'UP' in tunnel_statuses:
+                  return 'available'
+              else:
+                  return 'unavailable'
+
+          def get_tgw_attachment_id(vpn_connection_id):
+              """Get the Transit Gateway attachment ID for a VPN connection"""
+              response = ec2.describe_transit_gateway_attachments(
+                  Filters=[
+                      {
+                          'Name': 'resource-id',
+                          'Values': [vpn_connection_id]
+                      },
+                      {
+                          'Name': 'transit-gateway-id',
+                          'Values': [TRANSIT_GATEWAY_ID]
+                      }
+                  ]
+              )
+              
+              if not response['TransitGatewayAttachments']:
+                  logger.error(f"No Transit Gateway attachment found for VPN connection {vpn_connection_id}")
+                  return None
+              
+              return response['TransitGatewayAttachments'][0]['TransitGatewayAttachmentId']
+
+          def update_route(route_table_id, cidr_block, attachment_id):
+              """Update a Transit Gateway route to use the specified attachment"""
+              try:
+                  ec2.replace_transit_gateway_route(
+                      DestinationCidrBlock=cidr_block,
+                      TransitGatewayRouteTableId=route_table_id,
+                      TransitGatewayAttachmentId=attachment_id
+                  )
+                  logger.info(f"Updated route for {cidr_block} to use attachment {attachment_id}")
+                  return True
+              except Exception as e:
+                  logger.error(f"Error updating route: {str(e)}")
+                  return False
+
+          def send_notification(message):
+              """Send an SNS notification"""
+              if SNS_TOPIC_ARN:
+                  try:
+                      sns.publish(
+                          TopicArn=SNS_TOPIC_ARN,
+                          Subject="Transit Gateway VPN Monitoring Alert",
+                          Message=message
+                      )
+                      logger.info(f"Notification sent: {message}")
+                  except Exception as e:
+                      logger.error(f"Error sending notification: {str(e)}")
+
+  # CloudWatch Event Rule to trigger Lambda on schedule
+  VpnMonitoringSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Schedule for VPN monitoring Lambda function
+      ScheduleExpression: !Ref LambdaSchedule
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt VpnMonitoringLambda.Arn
+          Id: VpnMonitoringTarget
+
+  # Permission for CloudWatch Events to invoke Lambda
+  VpnMonitoringPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref VpnMonitoringLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt VpnMonitoringSchedule.Arn
+
+  # CloudWatch Event Rule for AWS Health Events
+  VpnHealthEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Rule to capture AWS Health events for VPN connections
+      EventPattern:
+        source:
+          - aws.health
+        detail-type:
+          - AWS Health Event
+        detail:
+          service:
+            - VPN
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt VpnMonitoringLambda.Arn
+          Id: VpnHealthEventTarget
+
+  # Permission for Health Events to invoke Lambda
+  VpnHealthEventPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref VpnMonitoringLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt VpnHealthEventRule.Arn
+
+Outputs:
+  TransitGatewayId:
+    Description: Transit Gateway ID
+    Value: !Ref TransitGateway
+
+  PrimaryVpnConnectionId:
+    Description: Primary VPN Connection ID
+    Value: !Ref PrimaryVpnConnection
+
+  StandbyVpnConnectionId:
+    Description: Standby VPN Connection ID
+    Value: !Ref StandbyVpnConnection
+
+  VpnMonitoringLambdaArn:
+    Description: ARN of the VPN Monitoring Lambda function
+    Value: !GetAtt VpnMonitoringLambda.Arn
+
+  VpnMonitoringTopicArn:
+    Description: ARN of the SNS Topic for VPN monitoring alerts
+    Value: !Ref VpnMonitoringTopic

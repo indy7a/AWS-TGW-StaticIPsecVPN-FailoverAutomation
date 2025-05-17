@@ -1,0 +1,101 @@
+Metadata-Version: 2.4
+Name: tgw_vpn_monitoring
+Version: 0.1.0
+Summary: Transit Gateway VPN Monitoring CDK Project
+Author: AWS
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Software Development :: Code Generators
+Classifier: Topic :: Utilities
+Classifier: Typing :: Typed
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: aws-cdk-lib>=2.0.0
+Requires-Dist: constructs>=10.0.0
+Requires-Dist: boto3>=1.28.0
+Dynamic: author
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# Transit Gateway VPN Monitoring CDK Project
+
+This CDK project deploys a Transit Gateway with VPN attachments and a Lambda function that monitors VPN connections and automatically reconfigures routes when failures occur.
+
+## Architecture
+
+The project creates the following resources:
+
+- AWS Transit Gateway
+- VPC attachment to the Transit Gateway
+- Primary and standby Customer Gateways
+- Primary and standby VPN connections with static routes
+- Lambda function for VPN monitoring
+- SNS topic for alerts and notifications
+- CloudWatch Event rules to trigger the Lambda function
+
+## Prerequisites
+
+- AWS CDK installed (`npm install -g aws-cdk`)
+- Python 3.9 or later
+- AWS CLI configured with appropriate credentials
+- A VPC in your AWS account
+
+## Installation
+
+1. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+2. Update the `cdk.json` file with your configuration:
+
+```json
+{
+  "context": {
+    "vpc_id": "vpc-12345678",
+    "primary_cgw_ip": "203.0.113.1",
+    "standby_cgw_ip": "203.0.113.2",
+    "on_premise_cidr": "192.168.0.0/16",
+    "lambda_schedule": "rate(5 minutes)"
+  }
+}
+```
+
+3. Deploy the stack:
+
+```bash
+cdk deploy
+```
+
+## Usage
+
+After deployment:
+
+1. Configure your on-premises VPN devices using the configuration information from the AWS Console
+2. The Lambda function will automatically monitor the VPN connections and switch routes as needed
+3. You'll receive notifications via SNS when route changes occur
+
+## Parameters
+
+- `vpc_id`: The ID of the VPC to attach to the Transit Gateway
+- `primary_cgw_ip`: The IP address of the primary customer gateway
+- `standby_cgw_ip`: The IP address of the standby customer gateway
+- `on_premise_cidr`: The CIDR block for the on-premises network (default: 192.168.0.0/16)
+- `lambda_schedule`: The schedule expression for Lambda function execution (default: rate(5 minutes))
+
+## Outputs
+
+- `TransitGatewayIdOutput`: The ID of the Transit Gateway
+- `PrimaryVpnConnectionIdOutput`: The ID of the primary VPN connection
+- `StandbyVpnConnectionIdOutput`: The ID of the standby VPN connection
+- `VpnMonitoringLambdaArnOutput`: The ARN of the VPN monitoring Lambda function
+- `VpnMonitoringTopicArnOutput`: The ARN of the SNS topic for VPN monitoring alerts
