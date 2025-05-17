@@ -25,10 +25,10 @@ with Diagram("Transit Gateway VPN Monitoring Architecture", show=True, direction
     # AWS Cloud components
     with Cluster("AWS Cloud"):
         # Transit Gateway and VPN connections
-        tgw = TransitGateway("Transit Gateway\ntgw-06cfcd82615995f5f")
+        tgw = TransitGateway("Transit Gateway")
         
-        primary_vpn = VpnConnection("Primary VPN\nvpn-02ea060346660d981")
-        standby_vpn = VpnConnection("Standby VPN\nvpn-0b795c8bfae6d0e9d")
+        primary_vpn = VpnConnection("Primary VPN")
+        standby_vpn = VpnConnection("Standby VPN")
         
         primary_cgw >> primary_vpn
         standby_cgw >> standby_vpn
